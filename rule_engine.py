@@ -35,75 +35,56 @@ class RuleEngine:
         rules = []
         
         # ===== N-QUEENS RULES =====
+        # Domeniu: n ∈ [4, 25]
         rules.append(Rule(
-            condition_func=lambda p, i: p == "n-queens" and i.get("size", 0) <= 8,
+            condition_func=lambda p, i: p == "n-queens" and i.get("size", 0) <= 10,
             conclusion="backtracking",
             confidence=0.95,
-            reasoning="Pentru n ≤ 8, spațiul de căutare este suficient de mic pentru explorare completă. Backtracking garantează găsirea tuturor soluțiilor în timp rezonabil."
+            reasoning="Pentru n ≤ 10, spațiul de căutare este suficient de mic pentru explorare completă. Backtracking garantează găsirea tuturor soluțiilor în timp rezonabil."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "n-queens" and 8 < i.get("size", 0) <= 15,
+            condition_func=lambda p, i: p == "n-queens" and 10 < i.get("size", 0) <= 18,
             conclusion="backtracking_with_heuristics",
             confidence=0.90,
-            reasoning="Pentru 8 < n ≤ 15, backtracking simplu devine lent. Heuristicile (forward checking, MRV) reduc dramatic spațiul de căutare menținând completitudinea."
+            reasoning="Pentru 10 < n ≤ 18, backtracking simplu devine lent. Heuristicile (forward checking, MRV) reduc dramatic spațiul de căutare menținând completitudinea."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "n-queens" and 15 < i.get("size", 0) <= 25,
+            condition_func=lambda p, i: p == "n-queens" and i.get("size", 0) > 18,
             conclusion="csp_forward_checking",
             confidence=0.85,
-            reasoning="Pentru 15 < n ≤ 25, CSP cu forward checking oferă cel mai bun echilibru. Detectarea timpurie a inconsistențelor reduce backtracking-ul exponențial."
+            reasoning="Pentru n > 18, CSP cu forward checking oferă cel mai bun echilibru. Detectarea timpurie a inconsistențelor reduce backtracking-ul exponențial."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "n-queens" and 25 < i.get("size", 0) <= 50,
-            conclusion="local_search",
-            confidence=0.90,
-            reasoning="Pentru 25 < n ≤ 50, metodele complete devin impracticabile. Local search (min-conflicts) găsește soluții în O(n²) cu probabilitate mare de succes."
-        ))
-        
-        rules.append(Rule(
-            condition_func=lambda p, i: p == "n-queens" and i.get("size", 0) > 50,
-            conclusion="simulated_annealing",
+            condition_func=lambda p, i: p == "n-queens" and i.get("objective") == "find_all" and i.get("size", 0) <= 12,
+            conclusion="backtracking",
             confidence=0.95,
-            reasoning="Pentru n > 50, simulated annealing evită optimele locale și găsește soluții chiar pentru n = 1000+. Este singura metodă scalabilă la dimensiuni foarte mari."
+            reasoning="Pentru a găsi TOATE soluțiile cu n ≤ 12, backtracking simplu este suficient de rapid pentru explorare exhaustivă completă."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "n-queens" and i.get("objective") == "find_all",
+            condition_func=lambda p, i: p == "n-queens" and i.get("objective") == "find_all" and i.get("size", 0) > 12,
             conclusion="backtracking_with_heuristics",
             confidence=0.95,
-            reasoning="Pentru a găsi TOATE soluțiile, trebuie folosită o metodă completă. Backtracking cu heuristici este cea mai eficientă pentru explorare exhaustivă."
+            reasoning="Pentru a găsi TOATE soluțiile cu n > 12, trebuie folosită o metodă completă cu heuristici pentru eficiență."
         ))
         
         # ===== HANOI RULES =====
+        # Domeniu: n ∈ [1, 22] cu 3 tije
         rules.append(Rule(
-            condition_func=lambda p, i: p == "hanoi" and i.get("towers", 3) == 3 and i.get("disks", 0) <= 20,
+            condition_func=lambda p, i: p == "hanoi" and i.get("towers", 3) == 3 and i.get("disks", 0) <= 15,
             conclusion="recursive_divide_conquer",
             confidence=1.0,
-            reasoning="Pentru Hanoi clasic (3 turle) cu n ≤ 20, soluția recursivă este optimă matematică (2^n - 1 mutări). Este elegantă, corectă și eficientă pentru aceste dimensiuni."
+            reasoning="Pentru Hanoi clasic (3 turle) cu n ≤ 15, soluția recursivă este optimă matematică (2^n - 1 mutări). Este elegantă, corectă și eficientă pentru aceste dimensiuni."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "hanoi" and i.get("towers", 3) == 3 and i.get("disks", 0) > 20,
+            condition_func=lambda p, i: p == "hanoi" and i.get("towers", 3) == 3 and i.get("disks", 0) > 15,
             conclusion="iterative",
             confidence=0.95,
-            reasoning="Pentru n > 20, recursivitatea poate cauza stack overflow. Varianta iterativă produce aceleași 2^n - 1 mutări optime fără riscul de overflow."
-        ))
-        
-        rules.append(Rule(
-            condition_func=lambda p, i: p == "hanoi" and i.get("towers", 3) > 3 and i.get("disks", 0) <= 15,
-            conclusion="frame_stewart_algorithm",
-            confidence=0.90,
-            reasoning="Pentru k > 3 turle, Frame-Stewart oferă soluția conjecturată optimă. Este mult mai eficient decât să folosim doar 3 turle din k disponibile."
-        ))
-        
-        rules.append(Rule(
-            condition_func=lambda p, i: p == "hanoi" and i.get("towers", 3) > 3 and i.get("disks", 0) > 15,
-            conclusion="iterative",
-            confidence=0.85,
-            reasoning="Pentru combinație (k > 3 turle, n > 15), varianta iterativă este cea mai sigură pentru a evita problema stack-ului în implementările recursive complexe."
+            reasoning="Pentru n > 15, recursivitatea poate cauza probleme de performanță. Varianta iterativă produce aceleași 2^n - 1 mutări optime mai eficient."
         ))
         
         rules.append(Rule(
@@ -114,6 +95,7 @@ class RuleEngine:
         ))
         
         # ===== GRAPH COLORING RULES =====
+        # Domeniu: n ∈ [5, 50]
         rules.append(Rule(
             condition_func=lambda p, i: p == "graph_coloring" and i.get("graph_type") == "bipartite",
             conclusion="greedy_basic",
@@ -129,24 +111,24 @@ class RuleEngine:
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "graph_coloring" and i.get("vertices", 0) <= 30 and i.get("need_optimal", False),
+            condition_func=lambda p, i: p == "graph_coloring" and i.get("vertices", 0) <= 20 and i.get("need_optimal", False),
             conclusion="backtracking_with_bounds",
             confidence=0.90,
-            reasoning="Pentru grafuri mici (V ≤ 30) când avem nevoie de numărul cromatic exact, backtracking cu branch & bound este singura metodă care garantează optim."
+            reasoning="Pentru grafuri mici (V ≤ 20) când avem nevoie de numărul cromatic exact, backtracking cu branch & bound este singura metodă care garantează optim."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "graph_coloring" and 30 < i.get("vertices", 0) <= 500,
+            condition_func=lambda p, i: p == "graph_coloring" and 20 < i.get("vertices", 0) <= 35,
             conclusion="greedy_dsatur",
             confidence=0.85,
             reasoning="Pentru grafuri medii, DSATUR oferă cele mai bune rezultate practice. Heuristica 'degree of saturation' produce colorări aproape-optime foarte rapid."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "graph_coloring" and i.get("vertices", 0) > 500,
-            conclusion="local_search_tabu",
+            condition_func=lambda p, i: p == "graph_coloring" and i.get("vertices", 0) > 35,
+            conclusion="welsh_powell",
             confidence=0.90,
-            reasoning="Pentru grafuri foarte mari (V > 500), doar local search scalează. Tabu search evită ciclarea și găsește soluții bune în timp polinomial."
+            reasoning="Pentru grafuri mari (V > 35), Welsh-Powell (sortare după grad descrescător) este eficient și produce colorări bune în timp liniar."
         ))
         
         rules.append(Rule(
@@ -164,39 +146,83 @@ class RuleEngine:
         ))
         
         # ===== KNIGHT'S TOUR RULES =====
+        # Domeniu: n ∈ [5, 12] pentru backtracking exact
         rules.append(Rule(
-            condition_func=lambda p, i: p == "knights_tour" and i.get("board_size", 0) <= 6,
+            condition_func=lambda p, i: p == "knights_tour" and i.get("board_size", 0) <= 7,
             conclusion="backtracking_warnsdorff",
             confidence=0.95,
-            reasoning="Pentru table mici (n ≤ 6), backtracking cu Warnsdorff garantează găsirea soluției rapid. Warnsdorff ghidează căutarea, backtracking-ul asigură completitudinea."
+            reasoning="Pentru table mici (n ≤ 7), backtracking cu Warnsdorff garantează găsirea soluției rapid. Warnsdorff ghidează căutarea, backtracking-ul asigură completitudinea."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "knights_tour" and 6 < i.get("board_size", 0) <= 20,
+            condition_func=lambda p, i: p == "knights_tour" and i.get("board_size", 0) > 7,
             conclusion="warnsdorff_heuristic",
             confidence=0.95,
-            reasoning="Pentru n în [7, 20], heuristica Warnsdorff singură găsește soluție în >99% cazuri în O(n²). Este extrem de rapidă și practic întotdeauna reușește."
+            reasoning="Pentru n în [8, 12], heuristica Warnsdorff singură găsește soluție în >99% cazuri în O(n²). Este extrem de rapidă și practic întotdeauna reușește."
         ))
         
         rules.append(Rule(
-            condition_func=lambda p, i: p == "knights_tour" and i.get("board_size", 0) > 20 and i.get("board_size", 0) % 2 == 0,
-            conclusion="divide_conquer",
-            confidence=0.90,
-            reasoning="Pentru table mari pătrate (n > 20, n par), algoritmi divide & conquer construiesc soluția garantat în O(n²) fără căutare."
-        ))
-        
-        rules.append(Rule(
-            condition_func=lambda p, i: p == "knights_tour" and i.get("board_size", 0) > 50,
-            conclusion="warnsdorff_heuristic",
-            confidence=0.90,
-            reasoning="Pentru table foarte mari, Warnsdorff rămâne cel mai eficient - liniar și practic întotdeauna găsește soluție pentru n mare."
-        ))
-        
-        rules.append(Rule(
-            condition_func=lambda p, i: p == "knights_tour" and i.get("tour_type") == "closed" and i.get("board_size", 0) <= 10,
+            condition_func=lambda p, i: p == "knights_tour" and i.get("tour_type") == "closed",
             conclusion="backtracking_warnsdorff",
             confidence=0.90,
             reasoning="Pentru ture închise (Hamiltonian), constrângerea e mai strictă. Backtracking cu Warnsdorff asigură găsirea soluției când există."
+        ))
+        
+        # ===== GAME THEORY RULES =====
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("has_dominant_strategy", False),
+            conclusion="dominance_elimination",
+            confidence=0.95,
+            reasoning="Când există strategii dominante, eliminarea iterativă (IESDS) simplifică dramatic analiza. Strategiile dominate nu vor fi jucate de agenți raționali."
+        ))
+        
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("strategies_per_player", 2) <= 2 and not i.get("has_dominant_strategy", False),
+            conclusion="pure_strategy_enumeration",
+            confidence=0.95,
+            reasoning="Pentru jocuri 2x2 fără strategii dominate, enumerarea directă a celor 4 profiluri de strategie este cea mai rapidă și clară metodă."
+        ))
+        
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("strategies_per_player", 2) == 3 and not i.get("has_dominant_strategy", False),
+            conclusion="best_response_analysis",
+            confidence=0.90,
+            reasoning="Pentru jocuri 3x3, analiza best response este sistematică și eficientă. Marcăm răspunsurile optime și identificăm celulele cu ambele marcate."
+        ))
+        
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("has_pure_nash", False) == False,
+            conclusion="mixed_strategy_calculation",
+            confidence=0.95,
+            reasoning="Când nu există echilibru Nash pur (precum în Matching Pennies), trebuie calculat echilibrul în strategii mixte folosind principiul indiferenței."
+        ))
+        
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("game_type") == "zero_sum",
+            conclusion="best_response_analysis",
+            confidence=0.90,
+            reasoning="În jocurile cu sumă zero, echilibrul Nash corespunde soluției minimax. Analiza best response identifică rapid strategiile optime."
+        ))
+        
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("game_type") in ["coordination_game", "battle_of_sexes", "stag_hunt"],
+            conclusion="pure_strategy_enumeration",
+            confidence=0.90,
+            reasoning="Jocurile de coordonare au de obicei echilibre Nash pure multiple. Enumerarea le identifică pe toate și permite analiza eficienței Pareto."
+        ))
+        
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("strategies_per_player", 2) >= 4,
+            conclusion="dominance_elimination",
+            confidence=0.85,
+            reasoning="Pentru jocuri mari (4+ strategii), prima etapă este eliminarea strategiilor dominate pentru a reduce dimensiunea problemei înainte de analiza detaliată."
+        ))
+        
+        rules.append(Rule(
+            condition_func=lambda p, i: p == "game_theory" and i.get("game_type") == "prisoners_dilemma",
+            conclusion="dominance_elimination",
+            confidence=0.95,
+            reasoning="Dilema Prizonierului are strategie dominantă (Defect). Eliminarea strategiilor dominate conduce direct la echilibrul Nash unic."
         ))
         
         # ===== CROSS-PROBLEM RULES =====

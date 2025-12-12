@@ -331,7 +331,7 @@ KNOWLEDGE_BASE = {
     },
     
     "knights_tour": {
-        "name": "Tura Calului (Knight's Tour)",
+        "name": "Turul Cavalerului (Knight's Tour)",
         "description": "Găsirea unei secvențe de mutări ale calului pe o tablă de șah astfel încât să viziteze fiecare pătrățel exact o dată",
         "complexity_class": "NP-Complete (decizie), dar soluții polinomiale există pentru tablouri mari",
         
@@ -439,11 +439,104 @@ KNOWLEDGE_BASE = {
             {"condition": "board_size > 50", "strategy": "warnsdorff_heuristic", "confidence": 0.90},
             {"condition": "tour_type == 'closed' and board_size <= 10", "strategy": "backtracking_warnsdorff", "confidence": 0.90}
         ]
+    },
+    
+    "game_theory": {
+        "name": "Teoria Jocurilor (Formă Normală)",
+        "description": "Analiza jocurilor în formă normală (matriceală) pentru găsirea echilibrelor Nash",
+        "complexity_class": "Polynomial pentru jocuri mici, PPAD-complete pentru echilibre mixte",
+        
+        "strategies": {
+            "pure_strategy_enumeration": {
+                "name": "Enumerare Strategii Pure",
+                "time_complexity": "O(m×n)",
+                "space_complexity": "O(1)",
+                "best_for": "jocuri mici 2x2 sau 2x3",
+                "advantages": [
+                    "simplu și direct",
+                    "garantează găsirea tuturor echilibrelor pure",
+                    "ușor de înțeles și implementat"
+                ],
+                "disadvantages": [
+                    "nu găsește echilibre mixte",
+                    "devine lent pentru jocuri mari"
+                ],
+                "when_to_use": "pentru jocuri 2x2 sau 2x3 fără strategii dominate evidente"
+            },
+            
+            "best_response_analysis": {
+                "name": "Analiza Best Response",
+                "time_complexity": "O(m×n)",
+                "space_complexity": "O(m+n)",
+                "best_for": "jocuri de dimensiune medie (până la 5x5)",
+                "advantages": [
+                    "metodă sistematică și clară",
+                    "identifică toate echilibrele pure",
+                    "bună pentru explicații didactice"
+                ],
+                "disadvantages": [
+                    "necesită analiza fiecărei celule",
+                    "overhead pentru jocuri foarte mici"
+                ],
+                "when_to_use": "pentru jocuri de dimensiune medie sau când vrem analiză sistematică"
+            },
+            
+            "dominance_elimination": {
+                "name": "Eliminare Iterativă a Strategiilor Dominate (IESDS)",
+                "time_complexity": "O(m²×n²)",
+                "space_complexity": "O(m×n)",
+                "best_for": "jocuri cu strategii clar dominate",
+                "advantages": [
+                    "reduce dimensiunea problemei",
+                    "identifică strategii iraționale",
+                    "poate simplifica dramatic analiza"
+                ],
+                "disadvantages": [
+                    "nu toate jocurile au strategii dominate",
+                    "ordinea eliminării poate conta pentru dominanță slabă"
+                ],
+                "when_to_use": "când există strategii clar inferioare care pot fi eliminate"
+            },
+            
+            "mixed_strategy_calculation": {
+                "name": "Calculul Strategiilor Mixte",
+                "time_complexity": "O(m×n) pentru 2x2, mai complex pentru jocuri mai mari",
+                "space_complexity": "O(m+n)",
+                "best_for": "jocuri fără echilibru Nash pur",
+                "advantages": [
+                    "găsește echilibre când nu există pure",
+                    "bazat pe principiul indiferenței",
+                    "soluție matematică precisă"
+                ],
+                "disadvantages": [
+                    "mai complex de calculat",
+                    "necesită algebră liniară pentru jocuri mari",
+                    "interpretare mai dificilă"
+                ],
+                "when_to_use": "când nu există echilibru Nash pur (ex: Matching Pennies)"
+            }
+        },
+        
+        "instance_parameters": {
+            "num_players": [2],
+            "strategies_per_player": [2, 3, 4, 5],
+            "game_type": ["prisoners_dilemma", "battle_of_sexes", "coordination_game", 
+                         "chicken", "matching_pennies", "stag_hunt", "random"],
+            "has_pure_nash": [True, False],
+            "has_dominant_strategy": [True, False]
+        },
+        
+        "decision_rules": [
+            {"condition": "has_dominant_strategy == True", "strategy": "dominance_elimination", "confidence": 0.95},
+            {"condition": "strategies_per_player <= 2 and has_dominant_strategy == False", "strategy": "pure_strategy_enumeration", "confidence": 0.95},
+            {"condition": "strategies_per_player <= 3 and has_dominant_strategy == False", "strategy": "best_response_analysis", "confidence": 0.90},
+            {"condition": "has_pure_nash == False", "strategy": "mixed_strategy_calculation", "confidence": 0.95},
+            {"condition": "strategies_per_player > 3", "strategy": "dominance_elimination", "confidence": 0.85}
+        ]
     }
 }
 
 
-# Templates pentru generarea întrebărilor
 QUESTION_TEMPLATES = {
     "standard": [
         "Pentru problema {problem_name} cu {instance_description}, care este strategia de rezolvare cea mai potrivită? Justificați alegerea.",
@@ -471,7 +564,6 @@ QUESTION_TEMPLATES = {
 }
 
 
-# Justificări template pentru răspunsuri
 REASONING_TEMPLATES = {
     "size_based": "Pentru dimensiunea {size}, strategia {strategy} este optimă deoarece {reason}. Complexitatea {complexity} este acceptabilă în acest caz.",
     

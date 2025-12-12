@@ -45,10 +45,27 @@ class SmarTest:
         
         # Setup problem distribution
         if problems is None:
-            problems = ["n-queens", "hanoi", "graph_coloring", "knights_tour"]
+            problems = ["n-queens", "hanoi", "graph_coloring", "knights_tour", "game_theory"]
         
-        problem_distribution = {p: num_questions // len(problems) for p in problems}
-        problem_distribution[problems[0]] += num_questions % len(problems)
+        # 40% game_theory, restul împărțit egal între celelalte probleme
+        problem_distribution = {}
+        if "game_theory" in problems:
+            game_theory_count = max(1, int(num_questions * 0.4))  # 40% game theory
+            other_problems = [p for p in problems if p != "game_theory"]
+            remaining = num_questions - game_theory_count
+            
+            if other_problems:
+                per_problem = remaining // len(other_problems)
+                extra = remaining % len(other_problems)
+                
+                for i, p in enumerate(other_problems):
+                    problem_distribution[p] = per_problem + (1 if i < extra else 0)
+            
+            problem_distribution["game_theory"] = game_theory_count
+        else:
+            # Fără game_theory - distribuție egală
+            problem_distribution = {p: num_questions // len(problems) for p in problems}
+            problem_distribution[problems[0]] += num_questions % len(problems)
         
         # Setup difficulty distribution
         if difficulty == "mixed":
@@ -432,7 +449,7 @@ def interactive_test():
     # Generate questions
     questions = app.generate_test(
         num_questions=num_q,
-        problems=["n-queens", "hanoi", "graph_coloring", "knights_tour"],
+        problems=["n-queens", "hanoi", "graph_coloring", "knights_tour", "game_theory"],
         difficulty=difficulty
     )
     
@@ -512,7 +529,7 @@ def main_demo():
     print("-"*80)
     questions = app.generate_test(
         num_questions=6,
-        problems=["n-queens", "hanoi", "graph_coloring", "knights_tour"],
+        problems=["n-queens", "hanoi", "graph_coloring", "knights_tour", "game_theory"],
         difficulty="mixed"
     )
     
