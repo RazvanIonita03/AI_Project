@@ -10,6 +10,10 @@ from enum import Enum
 from knowledge_base import KNOWLEDGE_BASE, QUESTION_TEMPLATES, REASONING_TEMPLATES
 from rule_engine import RuleEngine
 from parametric_generator import ParametricGenerator
+from game_theory_utils import (
+    generate_game_instance, format_matrix_ascii, find_pure_nash_equilibria,
+    format_nash_equilibria, recommend_strategy, get_classic_game, CLASSIC_GAMES
+)
 
 
 class GenerationMode(Enum):
@@ -260,6 +264,10 @@ Care este alegerea optimă și de ce? Argumentați considerând:
         """
         Generare parametrică - pentru volum mare și variații rapide
         """
+        # Special handling for game theory
+        if problem_type == "game_theory":
+            return self._game_theory_generation(difficulty)
+        
         # Use parametric generator
         instance = self.parametric_generator.generate_instance(problem_type, difficulty)
         strategy = self.parametric_generator.lookup_strategy(problem_type, instance)
@@ -291,6 +299,11 @@ Justificați alegerea considerând complexitatea computațională și caracteris
     
     def _generate_rich_instance(self, problem_type: str, difficulty: str) -> Dict[str, Any]:
         """Generează o instanță bogată cu context suplimentar"""
+        
+        # Special handling for game theory
+        if problem_type == "game_theory":
+            return self._generate_game_theory_instance(difficulty)
+        
         # Start with parametric instance
         instance = self.parametric_generator.generate_instance(problem_type, difficulty)
         
@@ -307,14 +320,104 @@ Justificați alegerea considerând complexitatea computațională și caracteris
         
         return instance
     
+    def _generate_game_theory_instance(self, difficulty: str) -> Dict[str, Any]:
+        """Generează o instanță de teoria jocurilor cu matrice"""
+        game = generate_game_instance(difficulty)
+        
+        # Build instance dict with all needed info
+        instance = {
+            "game_name": game.get("name", "Joc"),
+            "game_type": game.get("name_en", "game").lower().replace(" ", "_").replace("'", ""),
+            "matrix": game["matrix"],
+            "row_strategies": game.get("row_strategies", ["R1", "R2"]),
+            "col_strategies": game.get("col_strategies", ["C1", "C2"]),
+            "strategies_per_player": len(game["matrix"]),
+            "has_pure_nash": game.get("has_pure_nash", True),
+            "pure_nash": game.get("pure_nash", []),
+            "has_dominant_strategy": game.get("has_dominant_strategy", False),
+            "description": game.get("description", "")
+        }
+        
+        return instance
+    
+    def _game_theory_generation(self, difficulty: str) -> Question:
+        """
+        Generare specială pentru teoria jocurilor cu matrice afișată
+        """
+        instance = self._generate_game_theory_instance(difficulty)
+        
+        # Get recommended strategy
+        game_data = {
+            "matrix": instance["matrix"],
+            "has_pure_nash": instance["has_pure_nash"],
+            "pure_nash": instance["pure_nash"],
+            "has_dominant_strategy": instance["has_dominant_strategy"]
+        }
+        strategy, reasoning, confidence = recommend_strategy(game_data)
+        
+        # Format matrix for display
+        matrix_display = format_matrix_ascii(
+            instance["matrix"],
+            instance["row_strategies"],
+            instance["col_strategies"]
+        )
+        
+        # Format Nash equilibria answer
+        if instance["has_pure_nash"] and instance["pure_nash"]:
+            nash_answer = format_nash_equilibria(
+                instance["pure_nash"],
+                instance["row_strategies"],
+                instance["col_strategies"]
+            )
+        else:
+            nash_answer = "Nu există echilibru Nash în strategii pure. Trebuie calculat echilibrul în strategii mixte."
+        
+        # Build question text
+        question_text = f"""
+Problema: Teoria Jocurilor (Formă Normală)
+Joc: {instance['game_name']}
+
+Considerați următorul joc în formă normală (matriceală):
+
+{matrix_display}
+
+Întrebări:
+1. Există echilibru Nash în strategii pure? Dacă da, care este/sunt?
+2. Care este metoda optimă de analiză pentru a găsi echilibrul?
+
+Opțiuni de analiză:
+a) Enumerare directă a strategiilor pure
+b) Analiza Best Response
+c) Eliminare Iterativă a Strategiilor Dominate (IESDS)
+d) Calculul echilibrului în strategii mixte
+
+Justificați alegerea metodei considerând caracteristicile jocului.
+"""
+        
+        # Build complete reasoning
+        full_reasoning = f"{nash_answer}\n\nMetoda optimă: {strategy}\n{reasoning}"
+        
+        return Question(
+            text=question_text.strip(),
+            problem_type="game_theory",
+            instance=instance,
+            correct_strategy=strategy,
+            reasoning=full_reasoning,
+            difficulty=difficulty,
+            generation_mode="parametric",
+            metadata={"confidence": confidence, "nash_answer": nash_answer}
+        )
+    
     def _generate_boundary_instance(self, problem_type: str, difficulty: str) -> Dict[str, Any]:
         """Generează instanțe la granița dintre strategii (cazuri ambigue)"""
         
+        # Valori de graniță actualizate pentru domeniile:
+        # N-Queens [4,25], Hanoi [1,22], Graph [5,50], Knight [5,12]
         boundary_values = {
-            "n-queens": [8, 15, 25, 50],  # Boundaries between strategies
-            "hanoi": {"towers": [3, 4], "disks": [15, 20]},
-            "graph_coloring": {"vertices": [30, 500]},
-            "knights_tour": {"board_size": [6, 20]}
+            "n-queens": [10, 18, 25],  # Boundaries: backtracking/heuristics/csp
+            "hanoi": {"towers": [3], "disks": [10, 15, 20]},  # Doar 3 tije, graniță la 15
+            "graph_coloring": {"vertices": [20, 35, 50]},  # Boundaries în domeniul [5,50]
+            "knights_tour": {"board_size": [7, 10, 12]}  # Boundaries în domeniul [5,12]
         }
         
         if problem_type == "n-queens":
@@ -341,10 +444,43 @@ Justificați alegerea considerând complexitatea computațională și caracteris
                 "tour_type": random.choice(["open", "closed"])
             }
         
+        elif problem_type == "game_theory":
+            # Boundary case: Matching Pennies (no pure NE) vs games with pure NE
+            boundary_games = ["matching_pennies", "battle_of_sexes", "chicken"]
+            game_type = random.choice(boundary_games)
+            game = get_classic_game(game_type)
+            return {
+                "game_name": game.get("name", "Joc"),
+                "game_type": game_type,
+                "matrix": game["matrix"],
+                "row_strategies": game.get("row_strategies", ["R1", "R2"]),
+                "col_strategies": game.get("col_strategies", ["C1", "C2"]),
+                "strategies_per_player": len(game["matrix"]),
+                "has_pure_nash": game.get("has_pure_nash", True),
+                "pure_nash": game.get("pure_nash", []),
+                "has_dominant_strategy": game.get("has_dominant_strategy", False),
+                "description": game.get("description", "")
+            }
+        
         return self.parametric_generator.generate_instance(problem_type, difficulty)
     
     def _format_instance_rich(self, problem_type: str, instance: Dict[str, Any]) -> str:
         """Formatare bogată a instanței cu detalii suplimentare"""
+        
+        # Special handling for game theory - include matrix
+        if problem_type == "game_theory":
+            matrix = instance.get("matrix", [])
+            row_strats = instance.get("row_strategies", ["R1", "R2"])
+            col_strats = instance.get("col_strategies", ["C1", "C2"])
+            game_name = instance.get("game_name", "Joc")
+            
+            result = f"{game_name} ({len(matrix)}x{len(matrix[0]) if matrix else 0})\n\n"
+            result += "Matricea de plăți:\n"
+            result += format_matrix_ascii(matrix, row_strats, col_strats)
+            # Strip trailing spaces but keep structure, add double newline for proper separation
+            result = result.rstrip() + "\n\n"
+            return result
+        
         base_format = self.parametric_generator.format_instance(problem_type, instance)
         
         # Add complexity hints

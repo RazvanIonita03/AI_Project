@@ -17,9 +17,12 @@ def print_separator(char="=", length=80):
     print(char * length)
 
 
-def get_user_answer():
+def get_user_answer(problem_type: str = None):
     """
     Obține răspunsul utilizatorului în format structurat
+    
+    Args:
+        problem_type: Tipul problemei pentru a afișa exemple relevante
     
     Returns:
         str: Răspunsul formatat cu Strategie și Justificare
@@ -27,14 +30,37 @@ def get_user_answer():
     print("\n📝 Scrie răspunsul tău:")
     print("-" * 60)
     
-    # Get strategy
-    print("\n1. Care este STRATEGIA optimă?")
-    print("   Exemple: backtracking, simulated_annealing, greedy, etc.")
+    # Get strategy with context-appropriate examples
+    print("\n1. Care este STRATEGIA/METODA de analiză optimă?")
+    
+    if problem_type == "game_theory":
+        print("   ┌─────────────────────────────────────────────────────────┐")
+        print("   │ OPȚIUNI PENTRU TEORIA JOCURILOR:                        │")
+        print("   │  • pure_strategy_enumeration (sau: pure, enumerare)     │")
+        print("   │  • best_response_analysis (sau: best response)          │")
+        print("   │  • dominance_elimination (sau: IESDS, eliminare)        │")
+        print("   │  • mixed_strategy_calculation (sau: mixte, mixed)       │")
+        print("   └─────────────────────────────────────────────────────────┘")
+        print("   💡 Tip: Poți scrie varianta scurtă (ex: 'mixte' sau 'pure')")
+    else:
+        print("   Exemple: backtracking, simulated_annealing, greedy, etc.")
+    
     strategy = input("   Strategie: ").strip()
     
-    # Get justification
-    print("\n2. JUSTIFICĂ alegerea (explică de ce e optimă):")
-    print("   Menționează: complexitate, caracteristici problemă, trade-offs")
+    # Get justification with specific guidance
+    print("\n2. JUSTIFICĂ alegerea (explică DE CE e optimă):")
+    
+    if problem_type == "game_theory":
+        print("   ┌─────────────────────────────────────────────────────────┐")
+        print("   │ PUNCTAJ JUSTIFICARE (100p total):                       │")
+        print("   │  • Complexitate metodei (25p): ex. 'O(m×n)'             │")
+        print("   │  • Caracteristici joc (25p): dimensiune, tip echilibru  │")
+        print("   │  • Justificare metodă (30p): DE CE această metodă?      │")
+        print("   │  • Trade-offs (20p): comparație cu alternative          │")
+        print("   └─────────────────────────────────────────────────────────┘")
+    else:
+        print("   Menționează: complexitate, caracteristici problemă, trade-offs")
+    
     print("   (Scrie răspunsul și apasă Enter de 2 ori când termini)")
     
     justification_lines = []
@@ -72,7 +98,8 @@ def show_question(question: Question, number: int, total: int):
             'n-queens': 'N-Queens',
             'hanoi': 'Turnurile din Hanoi',
             'graph_coloring': 'Colorarea Grafurilor',
-            'knights_tour': 'Tura Calului'
+            'knights_tour': 'Turul Cavalerului',
+            'game_theory': 'Teoria Jocurilor'
         }
         print(f"📚 Problemă: {problem_names.get(question.problem_type, question.problem_type)}")
     
@@ -161,13 +188,17 @@ def main():
     print("\n🔄 Generare întrebări...")
     questions = app.generate_test(
         num_questions=num_questions,
-        problems=["n-queens", "hanoi", "graph_coloring", "knights_tour"],
+        problems=["n-queens", "hanoi", "graph_coloring", "knights_tour", "game_theory"],
         difficulty=difficulty
     )
     
     # Save test PDF
     pdf_file = app.save_test_pdf(questions)
     print(f"📕 Test salvat în: {pdf_file}")
+    
+    # Save barem PDF
+    barem_file = app.save_answers_pdf(questions)
+    print(f"📗 Barem salvat în: {barem_file}")
     
     # Quiz loop
     answers = []
@@ -179,8 +210,9 @@ def main():
         # Show question
         show_question(question, i, len(questions))
         
-        # Get answer
-        answer_text = get_user_answer()
+        # Get answer - pass problem_type for context-appropriate prompts
+        problem_type = getattr(question, 'problem_type', None)
+        answer_text = get_user_answer(problem_type)
         answers.append(answer_text)
         
         # Evaluate immediately
@@ -193,6 +225,9 @@ def main():
         
         if i < len(questions):
             input("\nApasă Enter pentru următoarea întrebare...")
+    
+    # Cerere Enter pentru a vedea rezultatele finale
+    input("\n" + "="*80 + "\n🏁 Ai terminat toate întrebările!\nApasă Enter pentru a vedea rezultatele finale...\n" + "="*80)
     
     # Final results
     clear_screen()

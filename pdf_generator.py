@@ -7,8 +7,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, Preformatted
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+import re
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from datetime import datetime
@@ -118,6 +119,19 @@ class PDFGenerator:
             textColor=colors.HexColor('#666666'),
             spaceAfter=6
         ))
+        
+        # Monospace style for matrices and code
+        self.styles.add(ParagraphStyle(
+            name='MonospaceText',
+            parent=self.styles['Normal'],
+            fontSize=9,
+            fontName='Courier',
+            textColor=colors.HexColor('#1a1a1a'),
+            spaceAfter=8,
+            spaceBefore=4,
+            leading=11,
+            alignment=TA_LEFT
+        ))
     
     def generate_test_pdf(self, 
                          questions: List[Any],
@@ -181,9 +195,14 @@ class PDFGenerator:
                 problem_name = self._get_problem_name(question.problem_type)
                 story.append(Paragraph(self.remove_diacritics(f"<b>Problema:</b> {problem_name}"), self.styles['Metadata']))
             
-            # Text întrebare
-            question_text = self._format_text_for_pdf(question.text)
-            story.append(Paragraph(self.remove_diacritics(question_text), self.styles['QuestionText']))
+            # Text întrebare - handle matrix specially for game theory
+            question_text = question.text
+            if hasattr(question, 'problem_type') and question.problem_type == 'game_theory':
+                # Split text into parts: before matrix, matrix, after matrix
+                story.extend(self._format_game_theory_question(question_text))
+            else:
+                formatted_text = self._format_text_for_pdf(question_text)
+                story.append(Paragraph(self.remove_diacritics(formatted_text), self.styles['QuestionText']))
             
             # Spațiu pentru răspuns
             if not include_answers:
@@ -297,29 +316,106 @@ class PDFGenerator:
             question_title = f"Intrebarea {i}: {score}/100 - <font color='{color.hexval()}'>{status}</font>"
             story.append(Paragraph(self.remove_diacritics(question_title), self.styles['QuestionTitle']))
             
-            # Breakdown
-            breakdown_text = f"<b>Strategie:</b> {result['strategy_score']}/100 "
-            breakdown_text += f"({'Corecta' if result['strategy_correct'] else 'Incorecta'})<br/>"
-            breakdown_text += f"<b>Justificare:</b> {result['reasoning_score']}/100"
-            story.append(Paragraph(self.remove_diacritics(breakdown_text), self.styles['QuestionText']))
+            # Tipul problemei
+            problem_type = getattr(question, 'problem_type', 'unknown')
+            problem_names = {
+                'n-queens': 'N-Queens',
+                'hanoi': 'Turnurile din Hanoi',
+                'graph_coloring': 'Colorarea Grafurilor',
+                'knights_tour': 'Turul Cavalerului',
+                'game_theory': 'Teoria Jocurilor'
+            }
+            problem_name = problem_names.get(problem_type, problem_type)
+            story.append(Paragraph(self.remove_diacritics(f"<b>Tip problema:</b> {problem_name}"), self.styles['QuestionText']))
             
-            # Feedback (primele 300 caractere)
-            feedback = result['feedback'].replace('\n', '<br/>')
-            if len(feedback) > 500:
-                feedback = feedback[:500] + "..."
-            story.append(Paragraph(self.remove_diacritics(f"<i>{feedback}</i>"), self.styles['Metadata']))
+            # Breakdown - tabel cu detalii
+            breakdown_data = [
+                [self.remove_diacritics('Componenta'), self.remove_diacritics('Punctaj'), self.remove_diacritics('Status')],
+                [self.remove_diacritics('Strategie (40%)'), f"{result['strategy_score']}/100", 
+                 self.remove_diacritics('Corecta' if result['strategy_correct'] else 'Incorecta')],
+                [self.remove_diacritics('Justificare (60%)'), f"{result['reasoning_score']}/100", 
+                 self.remove_diacritics(self._get_reasoning_status(result['reasoning_score']))],
+            ]
+            
+            breakdown_table = Table(breakdown_data, colWidths=[6*cm, 4*cm, 6*cm])
+            breakdown_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90d9')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (2, 1), (2, 1), colors.HexColor('#90EE90') if result['strategy_correct'] else colors.HexColor('#FFB6C1')),
+                ('BACKGROUND', (2, 2), (2, 2), self._get_reasoning_color(result['reasoning_score'])),
+            ]))
+            story.append(breakdown_table)
+            story.append(Spacer(1, 0.3*cm))
+            
+            # Răspunsul utilizatorului
+            story.append(Paragraph(self.remove_diacritics("<b>Raspunsul tau:</b>"), self.styles['QuestionText']))
+            if 'user_answer' in result:
+                user_answer = result.get('user_answer', 'N/A')
+                story.append(Paragraph(self.remove_diacritics(f"<i>{user_answer[:300]}{'...' if len(user_answer) > 300 else ''}</i>"), self.styles['Metadata']))
+            
+            # Răspunsul corect
+            story.append(Spacer(1, 0.2*cm))
+            story.append(Paragraph(self.remove_diacritics("<b>Raspuns corect:</b>"), self.styles['QuestionText']))
+            correct_strategy = result.get('correct_strategy', getattr(question, 'correct_answer', 'N/A'))
+            story.append(Paragraph(self.remove_diacritics(f"<b>Strategie:</b> {correct_strategy}"), self.styles['Metadata']))
+            
+            correct_reasoning = result.get('correct_reasoning', getattr(question, 'correct_reasoning', ''))
+            if correct_reasoning:
+                reasoning_clean = correct_reasoning.replace('\n', ' ')[:400]
+                if len(correct_reasoning) > 400:
+                    reasoning_clean += "..."
+                story.append(Paragraph(self.remove_diacritics(f"<b>Justificare model:</b> {reasoning_clean}"), self.styles['Metadata']))
+            
+            # Feedback detaliat din evaluare
+            story.append(Spacer(1, 0.3*cm))
+            story.append(Paragraph(self.remove_diacritics("<b>Feedback evaluare:</b>"), self.styles['QuestionText']))
+            
+            reasoning_details = result.get('reasoning_details', '')
+            if reasoning_details:
+                # Formatare detalii evaluare
+                details_lines = reasoning_details.split('\n')
+                for line in details_lines[:10]:  # Primele 10 linii
+                    if line.strip():
+                        line_clean = line.replace('<', '&lt;').replace('>', '&gt;')
+                        story.append(Paragraph(self.remove_diacritics(line_clean), self.styles['Metadata']))
             
             story.append(Spacer(1, 0.5*cm))
             story.append(self._create_thin_separator())
-            story.append(Spacer(1, 0.3*cm))
+            story.append(Spacer(1, 0.5*cm))
             
-            # Page break la fiecare 3 întrebări
-            if i % 3 == 0 and i < len(questions):
+            # Page break la fiecare 2 întrebări pentru mai mult spațiu
+            if i % 2 == 0 and i < len(questions):
                 story.append(PageBreak())
         
         # Build PDF
         doc.build(story)
         return filename
+    
+    def _get_reasoning_status(self, score: int) -> str:
+        """Returnează statusul pentru scorul de justificare"""
+        if score >= 90:
+            return "Excelent"
+        elif score >= 70:
+            return "Bun"
+        elif score >= 50:
+            return "Acceptabil"
+        else:
+            return "Insuficient"
+    
+    def _get_reasoning_color(self, score: int):
+        """Returnează culoarea pentru scorul de justificare"""
+        if score >= 90:
+            return colors.HexColor('#90EE90')  # Light green
+        elif score >= 70:
+            return colors.HexColor('#FFFFE0')  # Light yellow
+        elif score >= 50:
+            return colors.HexColor('#FFE4B5')  # Light orange
+        else:
+            return colors.HexColor('#FFB6C1')  # Light red
     
     def _create_separator(self):
         """Creează o linie separator groasă"""
@@ -330,6 +426,204 @@ class PDFGenerator:
         """Creează o linie separator subțire"""
         return Table([['']], colWidths=[16*cm], rowHeights=[0.05*cm],
                     style=[('LINEABOVE', (0, 0), (-1, 0), 0.5, colors.HexColor('#cccccc'))])
+    
+    def _format_game_theory_question(self, text: str) -> List:
+        """
+        Special formatting for game theory questions with matrix.
+        Renders the matrix as a proper PDF table for correct alignment.
+        
+        Handles multiple formats:
+        1. "Considerați următorul joc în formă normală (matriceală):" ... matrix ... "Întrebări:"
+        2. "Matricea de plăți:" ... matrix ... " poate fi rezolvată"
+        """
+        elements = []
+        
+        # Try to find matrix by looking for "Jucător 2 (Coloane)" or the payoff pattern
+        # Matrix lines contain patterns like "( 5,-5)" or "(-1, 2)"
+        
+        lines = text.split('\n')
+        matrix_start_idx = None
+        matrix_end_idx = None
+        
+        # Find matrix boundaries
+        for i, line in enumerate(lines):
+            # Matrix starts with "Jucător 2" header or column headers
+            if 'Juc' in line and '2' in line and ('Coloane' in line or 'Col' in line):
+                matrix_start_idx = i
+            # Or starts with column strategy names line (before payoffs)
+            elif matrix_start_idx is None and re.search(r'^\s+\w+\s+\w+\s*$', line) and i < len(lines) - 1:
+                # Check if next line has separator or payoffs
+                next_line = lines[i + 1] if i + 1 < len(lines) else ""
+                if '---' in next_line or '(' in next_line:
+                    matrix_start_idx = i
+            
+            # Matrix ends after last row with payoffs
+            if matrix_start_idx is not None and '(' in line and ')' in line:
+                matrix_end_idx = i
+        
+        # If no matrix found, try alternative approach
+        if matrix_start_idx is None:
+            # Look for "Matricea de plăți:" marker
+            for i, line in enumerate(lines):
+                if 'Matrice' in line and 'pl' in line.lower():
+                    matrix_start_idx = i + 1  # Matrix starts after this line
+                    break
+        
+        if matrix_start_idx is not None and matrix_end_idx is not None:
+            # Extract parts
+            before_lines = lines[:matrix_start_idx]
+            matrix_lines = lines[matrix_start_idx:matrix_end_idx + 1]
+            after_lines = lines[matrix_end_idx + 1:]
+            
+            before_text = '\n'.join(before_lines).strip()
+            matrix_text = '\n'.join(matrix_lines)
+            after_text = '\n'.join(after_lines).strip()
+            
+            # Add text before matrix
+            if before_text:
+                formatted_before = self._format_text_for_pdf(before_text)
+                elements.append(Paragraph(self.remove_diacritics(formatted_before), self.styles['QuestionText']))
+            
+            elements.append(Spacer(1, 0.3*cm))
+            
+            # Create matrix table from ASCII representation
+            matrix_table = self._create_matrix_table_from_ascii(matrix_text)
+            if matrix_table:
+                elements.append(matrix_table)
+            else:
+                # Fallback: use preformatted text
+                matrix_clean = self.remove_diacritics(matrix_text)
+                elements.append(Preformatted(matrix_clean, self.styles['MonospaceText']))
+            
+            elements.append(Spacer(1, 0.3*cm))
+            
+            # Add text after matrix
+            if after_text:
+                formatted_after = self._format_text_for_pdf(after_text)
+                elements.append(Paragraph(self.remove_diacritics(formatted_after), self.styles['QuestionText']))
+        else:
+            # Fallback: render entire text normally
+            formatted_text = self._format_text_for_pdf(text)
+            elements.append(Paragraph(self.remove_diacritics(formatted_text), self.styles['QuestionText']))
+        
+        return elements
+    
+    def _create_matrix_table_from_ascii(self, ascii_matrix: str) -> Table:
+        """
+        Parsează matricea ASCII și creează un tabel PDF frumos formatat.
+        """
+        lines = ascii_matrix.strip().split('\n')
+        
+        if len(lines) < 3:
+            return None
+        
+        # Parse the matrix structure
+        # Expected format:
+        # Line 0: "                            Jucător 2 (Coloane)"
+        # Line 1: "             C1      C2" (column headers)
+        # Line 2: " ----------------" (separator)
+        # Line 3+: "Jucător 1  R1 |  (x,y)  (x,y)" (data rows)
+        
+        try:
+            table_data = []
+            col_strategies = []
+            row_strategies = []
+            payoff_rows = []
+            
+            # Find column headers line (contains strategy names like C1, C2 or Cooperate, etc.)
+            header_line_idx = None
+            for i, line in enumerate(lines):
+                # Skip "Jucător 2" title line and separator
+                if 'Juc' in line and '2' in line and 'Coloane' in line:
+                    continue
+                if '---' in line:
+                    continue
+                # Look for column headers (line with strategy names but no payoffs)
+                if '(' not in line and line.strip() and not line.strip().startswith('Juc'):
+                    # This is likely the header row
+                    parts = line.split()
+                    col_strategies = [self.remove_diacritics(p) for p in parts if p.strip()]
+                    header_line_idx = i
+                    break
+            
+            # Parse data rows (lines with payoffs in parentheses)
+            for line in lines:
+                if '(' in line and ')' in line:
+                    # Extract row label
+                    row_label = ""
+                    if '|' in line:
+                        label_part = line.split('|')[0]
+                        # Get the last word before | which is the strategy name
+                        label_words = label_part.split()
+                        if label_words:
+                            row_label = label_words[-1]
+                    
+                    # Extract payoffs
+                    payoffs = re.findall(r'\(\s*-?\d+\s*,\s*-?\d+\s*\)', line)
+                    
+                    if payoffs:
+                        row_strategies.append(self.remove_diacritics(row_label))
+                        payoff_rows.append([self.remove_diacritics(p) for p in payoffs])
+            
+            if not payoff_rows or not col_strategies:
+                return None
+            
+            # Build table data
+            # First row: empty corner + column headers
+            header_row = [''] + col_strategies
+            table_data.append(header_row)
+            
+            # Data rows: row label + payoffs
+            for i, (row_label, payoffs) in enumerate(zip(row_strategies, payoff_rows)):
+                row = [row_label] + payoffs
+                table_data.append(row)
+            
+            # Calculate column widths
+            num_cols = len(header_row)
+            col_width = 2.5 * cm
+            first_col_width = 2 * cm
+            col_widths = [first_col_width] + [col_width] * (num_cols - 1)
+            
+            # Create table
+            table = Table(table_data, colWidths=col_widths)
+            
+            # Style the table
+            style = TableStyle([
+                # Header row styling
+                ('BACKGROUND', (1, 0), (-1, 0), colors.HexColor('#e6f2ff')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#0066cc')),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                
+                # First column styling (row labels)
+                ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#e6f2ff')),
+                ('TEXTCOLOR', (0, 1), (0, -1), colors.HexColor('#0066cc')),
+                ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+                
+                # Data cells
+                ('FONTNAME', (1, 1), (-1, -1), 'Courier'),
+                ('FONTSIZE', (1, 1), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                
+                # Grid
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+                ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#0066cc')),
+                
+                # Padding
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ])
+            
+            table.setStyle(style)
+            return table
+            
+        except Exception as e:
+            # If parsing fails, return None to use fallback
+            print(f"Matrix parsing error: {e}")
+            return None
     
     def _format_text_for_pdf(self, text: str) -> str:
         """Formatează text pentru PDF (escape HTML, păstrează formatare)"""
@@ -348,7 +642,8 @@ class PDFGenerator:
             'n-queens': 'N-Queens',
             'hanoi': 'Turnurile din Hanoi',
             'graph_coloring': 'Colorarea Grafurilor',
-            'knights_tour': 'Tura Calului'
+            'knights_tour': 'Turul Cavalerului',
+            'game_theory': 'Teoria Jocurilor'
         }
         return names.get(problem_type, problem_type)
 
